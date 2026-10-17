@@ -41,7 +41,41 @@ async function request(path, options = {}) {
 }
 
 function normalizeUser(payload) {
-  return payload?.user || payload?.data?.user || payload?.data || payload
+  const rawUser = payload?.user || payload?.data?.user || payload?.data || payload
+  if (!rawUser || typeof rawUser !== 'object' || Array.isArray(rawUser)) return rawUser
+
+  // Keep the client tolerant of both snake_case API responses and the
+  // camelCase shape used by a few integrations. The backend can add
+  // organization metadata without requiring a frontend release.
+  const rawOrganizations = rawUser.organizations
+    || rawUser.orgs
+    || payload?.organizations
+    || payload?.data?.organizations
+    || []
+  const organizations = Array.isArray(rawOrganizations)
+    ? rawOrganizations
+      .filter((organization) => organization && typeof organization === 'object')
+      .map((organization) => ({
+        ...organization,
+        id: organization.id ?? organization.organization_id ?? organization.slug ?? organization.name,
+        name: organization.name || organization.title || organization.slug || 'Организация',
+      }))
+      .filter((organization) => organization.id !== undefined && organization.id !== null)
+    : []
+  const activeOrganization = rawUser.active_organization
+    || rawUser.activeOrganization
+    || payload?.active_organization
+    || payload?.activeOrganization
+  const activeOrganizationId = rawUser.active_organization_id
+    ?? rawUser.activeOrganizationId
+    ?? activeOrganization?.id
+    ?? null
+
+  return {
+    ...rawUser,
+    organizations,
+    active_organization_id: activeOrganizationId,
+  }
 }
 
 export async function signIn(email, password) {

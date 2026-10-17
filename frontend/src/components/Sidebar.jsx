@@ -1,4 +1,5 @@
-import { BriefcaseBusiness, CheckSquare, LayoutDashboard, LogOut, Settings, Users, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { BriefcaseBusiness, Building2, CheckSquare, LayoutDashboard, LogOut, Settings, Users, X } from 'lucide-react'
 import Brand from './Brand.jsx'
 
 const navigation = [
@@ -9,7 +10,21 @@ const navigation = [
   { label: 'Настройки', icon: Settings },
 ]
 
-export default function Sidebar({ user, isOpen, onClose, onLogout }) {
+export default function Sidebar({ user, isOpen, onClose, onLogout, onOrganizationChange }) {
+  const organizations = useMemo(() => normalizeOrganizations(user?.organizations), [user?.organizations])
+  const initialOrganizationId = getActiveOrganizationId(user, organizations)
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState(initialOrganizationId)
+
+  useEffect(() => {
+    setSelectedOrganizationId(getActiveOrganizationId(user, organizations))
+  }, [user, organizations])
+
+  function handleOrganizationChange(event) {
+    const organizationId = event.target.value
+    setSelectedOrganizationId(organizationId)
+    onOrganizationChange?.(organizationId)
+  }
+
   return (
     <>
       {isOpen && <button className="sidebar-backdrop" aria-label="Закрыть меню" onClick={onClose} />}
@@ -18,6 +33,21 @@ export default function Sidebar({ user, isOpen, onClose, onLogout }) {
           <Brand light />
           <button className="icon-button close-menu" aria-label="Закрыть меню" onClick={onClose}><X size={19} /></button>
         </div>
+        {organizations.length > 0 && (
+          <div className="organization-switcher">
+            <div className="organization-heading"><Building2 size={15} aria-hidden="true" /><span>Организация</span></div>
+            <select
+              aria-label="Выберите организацию"
+              className="organization-select"
+              value={selectedOrganizationId}
+              onChange={handleOrganizationChange}
+            >
+              {organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>{organization.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <nav className="main-nav" aria-label="Основная навигация">
           {navigation.map(({ label, icon: Icon, active }) => (
             <a className={active ? 'nav-link active' : 'nav-link'} href={`#${label.toLowerCase()}`} key={label} onClick={onClose}>
@@ -37,6 +67,22 @@ export default function Sidebar({ user, isOpen, onClose, onLogout }) {
       </aside>
     </>
   )
+}
+
+function normalizeOrganizations(organizations) {
+  if (!Array.isArray(organizations)) return []
+  return organizations
+    .filter((organization) => organization && organization.id !== undefined && organization.id !== null)
+    .map((organization) => ({
+      ...organization,
+      id: String(organization.id),
+      name: organization.name || organization.title || organization.slug || 'Организация',
+    }))
+}
+
+function getActiveOrganizationId(user, organizations) {
+  const activeId = user?.active_organization_id || user?.activeOrganizationId || user?.active_organization?.id || user?.activeOrganization?.id
+  return String(activeId || organizations[0]?.id || '')
 }
 
 function getInitials(name) {

@@ -56,6 +56,11 @@ button:disabled { cursor: wait; opacity: .7; }
 .sidebar { background: var(--navy); color: #aeb8cc; display: flex; flex-direction: column; flex: 0 0 254px; min-height: 100vh; padding: 29px 16px 22px; position: relative; z-index: 10; }
 .sidebar-top { align-items: center; display: flex; justify-content: space-between; padding: 0 12px 53px; }
 .close-menu { display: none !important; }
+.organization-switcher { background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.09); border-radius: 10px; margin: -29px 0 24px; padding: 10px; }
+.organization-heading { align-items: center; color: #8e9ab2; display: flex; font-size: 10px; font-weight: 700; gap: 6px; letter-spacing: .07em; margin-bottom: 6px; text-transform: uppercase; }
+.organization-select { appearance: none; background: #263353; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600; min-width: 0; outline: 0; overflow: hidden; padding: 9px 26px 9px 9px; text-overflow: ellipsis; width: 100%; }
+.organization-select:focus { border-color: #8993ff; box-shadow: 0 0 0 2px rgba(137,147,255,.2); }
+.organization-select option { background: #fff; color: #172033; }
 .main-nav { display: flex; flex-direction: column; gap: 4px; }
 .nav-link { align-items: center; border-radius: 9px; color: #aeb8cc; display: flex; font-size: 14px; gap: 13px; padding: 12px; text-decoration: none; transition: .2s background, .2s color; }
 .nav-link:hover, .nav-link.active { background: #263353; color: #fff; }
