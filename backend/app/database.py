@@ -12,6 +12,7 @@ from collections.abc import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 
 def _database_url() -> str:
@@ -32,6 +33,9 @@ _engine_kwargs: dict[str, object] = {"pool_pre_ping": True}
 if DATABASE_URL.startswith("sqlite"):
     # SQLite is useful for local smoke checks; it is not used by Compose.
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
+    if ":memory:" in DATABASE_URL:
+        # Keep one connection so an in-memory schema survives across requests.
+        _engine_kwargs["poolclass"] = StaticPool
 
 engine = create_engine(DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
