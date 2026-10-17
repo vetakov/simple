@@ -131,7 +131,7 @@ curl -b /tmp/pulse-cookies.txt -X POST http://localhost:8000/api/auth/logout
 
 ## Переменные окружения
 
-Основные переменные задаются в корневом `.env` и подставляются Compose:
+Корневой `.env` используется Compose для `POSTGRES_*`, demo-реквизитов и `VITE_API_URL`. Compose сам формирует `DATABASE_URL` для backend из параметров PostgreSQL. Остальные backend-параметры (`FRONTEND_ORIGINS`, cookie и retry) задаются в `docker-compose.yml`, `backend/.env.example` или через настройки деплоя:
 
 | Переменная | Назначение | Значение по умолчанию |
 | --- | --- | --- |

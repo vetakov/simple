@@ -57,7 +57,7 @@ git status --short
 cp .env.example .env
 ```
 
-Минимальные значения для разработки:
+Минимальные значения для разработки в корневом `.env`:
 
 ```dotenv
 POSTGRES_DB=pulse_crm
@@ -65,13 +65,12 @@ POSTGRES_USER=pulse
 POSTGRES_PASSWORD=pulse_dev_password
 DEMO_EMAIL=demo@pulse.crm
 DEMO_PASSWORD=demo123
-DATABASE_URL=postgresql+psycopg://pulse:pulse_dev_password@postgres:5432/pulse_crm
-FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 VITE_API_URL=http://localhost:8000/api
-COOKIE_SECURE=false
 ```
 
 `docker-compose.yml` подставляет `POSTGRES_*` и формирует `DATABASE_URL` для backend с hostname `postgres`. Если меняете логин, пароль или имя базы, меняйте связанные значения согласованно. Не коммитьте `.env` и не передавайте секреты в чат.
+
+`DATABASE_URL`, `FRONTEND_ORIGINS` и `COOKIE_SECURE` из примера backend нужны при запуске backend вне Compose либо задаются настройками конкретного деплоя. Для стандартного Compose `FRONTEND_ORIGINS` разрешает `http://localhost:3000` и `http://127.0.0.1:3000`, а `COOKIE_SECURE=false` задан в `docker-compose.yml`.
 
 ## 5. Запуск через Docker Compose
 
