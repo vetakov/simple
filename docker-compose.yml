@@ -1,4 +1,23 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pulse-crm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pulse_crm}
+      POSTGRES_USER: ${POSTGRES_USER:-pulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pulse_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   backend:
     build:
       context: ./backend
@@ -9,8 +28,12 @@ services:
       COOKIE_SECURE: "false"
       DEMO_EMAIL: ${DEMO_EMAIL:-demo@pulse.crm}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-demo123}
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-pulse}:${POSTGRES_PASSWORD:-pulse_dev_password}@postgres:5432/${POSTGRES_DB:-pulse_crm}"
     ports:
       - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 10s
@@ -28,3 +51,6 @@ services:
         condition: service_healthy
     ports:
       - "3000:80"
+
+volumes:
+  postgres_data:
