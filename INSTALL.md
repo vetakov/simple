@@ -159,6 +159,14 @@ export DEMO_PASSWORD='demo123'
 export FRONTEND_ORIGINS='http://localhost:5173'
 ```
 
+Для быстрых smoke-тестов без отдельного PostgreSQL backend также поддерживает SQLite в памяти:
+
+```bash
+export DATABASE_URL='sqlite+pysqlite:///:memory:'
+```
+
+Это режим проверки Python/API, а не замена PostgreSQL: схема и данные живут только в процессе и исчезают после его остановки. Для разработки с сохранением данных и для интеграционных проверок используйте Compose PostgreSQL.
+
 ### Backend
 
 ```bash

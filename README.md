@@ -169,7 +169,7 @@ docker compose down
 (cd backend && python -m compileall app)
 ```
 
-Для локального backend без контейнера нужен запущенный PostgreSQL и `DATABASE_URL` с host `localhost`, например `postgresql+psycopg://pulse:pulse_dev_password@localhost:5432/pulse_crm`; подробности — в [INSTALL.md](INSTALL.md).
+Для локального backend без контейнера используйте PostgreSQL и `DATABASE_URL` с host `localhost`, например `postgresql+psycopg://pulse:pulse_dev_password@localhost:5432/pulse_crm`. Для быстрых smoke-тестов допустим SQLite (`sqlite+pysqlite:///:memory:`), но он не заменяет PostgreSQL-интеграцию; подробности — в [INSTALL.md](INSTALL.md).
 
 ## Безопасность и production
 
