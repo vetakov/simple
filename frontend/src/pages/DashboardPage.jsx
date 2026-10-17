@@ -16,7 +16,7 @@ const fallback = {
 
 export default function DashboardPage({ user, data, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const dashboard = { ...fallback, ...(data || {}), metrics: { ...fallback.metrics, ...(data?.metrics || {}) } }
+  const dashboard = normalizeDashboard(data)
   const firstName = (user?.name || 'Алексей').split(' ')[0]
   const date = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
 
@@ -31,8 +31,8 @@ export default function DashboardPage({ user, data, onLogout }) {
         </header>
         <div className="dashboard-content">
           <section className="kpi-grid" aria-label="Ключевые показатели">
-            <KpiCard type="revenue" label="Выручка за месяц" value={dashboard.metrics.revenue.value} trend={`↗ ${dashboard.metrics.revenue.trend}`} />
-            <KpiCard type="clients" label="Новые клиенты" value={dashboard.metrics.clients.value} trend={`↗ ${dashboard.metrics.clients.trend}`} />
+            <KpiCard type="revenue" label="Выручка за месяц" value={dashboard.metrics.revenue.value} trend={dashboard.metrics.revenue.trend} />
+            <KpiCard type="clients" label="Новые клиенты" value={dashboard.metrics.clients.value} trend={dashboard.metrics.clients.trend} />
             <KpiCard type="deals" label="Сделки в работе" value={dashboard.metrics.deals.value} note={dashboard.metrics.deals.note} />
             <KpiCard type="tasks" label="Задачи на сегодня" value={dashboard.metrics.tasks.value} note={dashboard.metrics.tasks.note} />
           </section>
@@ -45,4 +45,40 @@ export default function DashboardPage({ user, data, onLogout }) {
 
 function getInitials(name) {
   return name.split(' ').slice(0, 2).map((part) => part[0]).join('').toUpperCase()
+}
+
+
+function normalizeDashboard(data) {
+  const rawMetrics = data?.metrics
+  const metrics = Array.isArray(rawMetrics)
+    ? metricsFromList(rawMetrics)
+    : { ...fallback.metrics, ...(rawMetrics || {}) }
+  const deals = (data?.deals || []).map((deal) => ({
+    ...deal,
+    client: deal.client || deal.company || 'Без названия',
+    description: deal.description || deal.contact || '',
+    owner: deal.owner || deal.contact || '—',
+    tone: deal.tone || toneForStage(deal.stage_key || deal.stage),
+  }))
+  return { ...fallback, ...(data || {}), metrics, deals }
+}
+
+function metricsFromList(items) {
+  const byId = Object.fromEntries(items.map((item) => [item.id, item]))
+  const metric = (id, defaultValue, defaultNote = '') => {
+    const item = byId[id] || {}
+    return { value: item.value || defaultValue, trend: item.change ? `↗ ${item.change}` : '', note: item.note || defaultNote }
+  }
+  return {
+    revenue: metric('revenue', fallback.metrics.revenue.value),
+    clients: metric('clients', fallback.metrics.clients.value),
+    deals: metric('deals', fallback.metrics.deals.value, fallback.metrics.deals.note),
+    tasks: metric('tasks', fallback.metrics.tasks.value, fallback.metrics.tasks.note),
+  }
+}
+
+function toneForStage(stage) {
+  if (stage === 'proposal' || stage === 'commercial') return 'blue'
+  if (stage === 'closed' || stage === 'closing') return 'purple'
+  return 'green'
 }

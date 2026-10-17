@@ -1,0 +1,30 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: pulse-crm-backend
+    environment:
+      PORT: 8000
+      FRONTEND_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      COOKIE_SECURE: "false"
+      DEMO_EMAIL: ${DEMO_EMAIL:-demo@pulse.crm}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-demo123}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
+    container_name: pulse-crm-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:80"
