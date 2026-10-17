@@ -1,189 +1,264 @@
 # Руководство по установке Pulse CRM
 
-Документ рассчитан на чистую машину разработчика, CI и облачную среду. Рекомендуемый способ запуска — Docker Compose: он одинаково поднимает React frontend и Python backend локально и в CI.
+Документ рассчитан на чистую машину разработчика, CI и cloud-окружение. Рекомендуемый путь — Docker Compose: он собирает React frontend, Python backend и PostgreSQL с общей внутренней сетью.
 
-## 1. Требования
+## 1. Что устанавливается
+
+Compose поднимает три сервиса:
+
+| Сервис | Образ | Назначение | Порт хоста |
+| --- | --- | --- | --- |
+| `frontend` | собственный образ React/Nginx | UI и статические файлы | `3000` |
+| `backend` | собственный образ Python/FastAPI | API, авторизация и доступ к БД | `8000` |
+| `postgres` | `postgres:16-alpine` | постоянное хранилище | `5432` |
+
+Backend ждёт health check `postgres`, затем при старте создаёт таблицы SQLAlchemy и выполняет идемпотентный seed demo-пользователя с двумя организациями. Volume `postgres_data` сохраняет данные между перезапусками контейнеров.
+
+## 2. Требования
 
 Для Docker-режима:
 
 - Docker Engine 24 или новее;
-- Docker Compose v2 (команда docker compose version);
-- доступ к registry для загрузки базовых образов и npm/pip-пакетов при первой сборке.
+- Docker Compose v2 (`docker compose version`);
+- доступ к registry для базовых образов и к npm/PyPI при первой сборке;
+- свободные порты 3000, 5432 и 8000 (или изменённые host-side mapping в Compose).
 
 Для запуска без Docker дополнительно потребуются:
 
 - Python 3.11+;
-- Node.js 20+ и npm 10+.
+- Node.js 20+ и npm 10+;
+- PostgreSQL 16 (локально или удалённый экземпляр).
 
-Проверьте инструменты:
+Проверка инструментов:
 
-    docker --version
-    docker compose version
-    python --version
-    node --version
-    npm --version
+```bash
+docker --version
+docker compose version
+python --version
+node --version
+npm --version
+```
 
-Python и Node нужны только для локальной разработки без контейнеров. Docker-образам достаточно Docker Engine.
+## 3. Получение исходников
 
-## 2. Получение исходников
+```bash
+git clone https://github.com/vetakov/simple.git
+cd simple
+git status --short
+```
 
-    git clone https://github.com/vetakov/simple.git
-    cd simple
+Используйте уже выданный checkout в cloud-окружении; отдельный worktree для onboarding не нужен. Перед настройкой сохраните незакоммиченные изменения и не перезаписывайте чужие `.env`.
 
-Не создавайте отдельный worktree для cloud-окружения: используйте уже выданный checkout репозитория. Перед настройкой убедитесь, что в нём нет чужих незакоммиченных изменений:
+## 4. Конфигурация
 
-    git status --short
+Создайте локальный файл Compose:
 
-## 3. Конфигурация
+```bash
+cp .env.example .env
+```
 
-Скопируйте примеры переменных, если они есть в checkout:
+Минимальные значения для разработки:
 
-    cp backend/.env.example backend/.env
-    cp frontend/.env.example frontend/.env
+```dotenv
+POSTGRES_DB=pulse_crm
+POSTGRES_USER=pulse
+POSTGRES_PASSWORD=pulse_dev_password
+DEMO_EMAIL=demo@pulse.crm
+DEMO_PASSWORD=demo123
+DATABASE_URL=postgresql+psycopg://pulse:pulse_dev_password@postgres:5432/pulse_crm
+FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+VITE_API_URL=http://localhost:8000/api
+COOKIE_SECURE=false
+```
 
-Минимальная Docker-конфигурация бэкенда:
+`docker-compose.yml` подставляет `POSTGRES_*` и формирует `DATABASE_URL` для backend с hostname `postgres`. Если меняете логин, пароль или имя базы, меняйте связанные значения согласованно. Не коммитьте `.env` и не передавайте секреты в чат.
 
-    PORT=8000
-    FRONTEND_ORIGINS=http://localhost:3000
-    DEMO_EMAIL=demo@pulse.crm
-    DEMO_PASSWORD=demo123
+## 5. Запуск через Docker Compose
 
-Для frontend в локальном Vite-режиме оставьте:
+Сначала проверьте итоговую конфигурацию и поднимите сервисы:
 
-    VITE_API_URL=/api
+```bash
+docker compose config
+docker compose up --build -d
+docker compose ps
+```
 
-Внешний API задаётся полным URL с /api, например https://api.example.com/api. Переменные VITE_* становятся частью клиентского JavaScript, поэтому в них нельзя хранить секреты. Полное описание переменных, CORS и Docker-сети — в docs/ENVIRONMENT.md.
+`postgres` должен иметь статус `healthy`, затем `backend` — `healthy` (или `Up`, если версия Compose не показывает health в таблице). Посмотрите логи первого запуска:
 
-## 4. Запуск через Docker Compose
-
-Соберите образы и запустите оба сервиса:
-
-    docker compose up --build
-
-Для запуска в фоне:
-
-    docker compose up --build -d
-    docker compose ps
+```bash
+docker compose logs --tail=100 postgres backend
+```
 
 Ожидаемые точки доступа:
 
-- UI: http://localhost:3000
-- API health: http://localhost:8000/api/health
+- UI: <http://localhost:3000>
+- API health: <http://localhost:8000/api/health>
+- Swagger: <http://localhost:8000/docs>
+- PostgreSQL: `localhost:5432` только для локальной диагностики.
 
-Порт может быть изменён в docker-compose.yml или переменными, если это предусмотрено compose-файлом. Не редактируйте Dockerfile ради смены внешнего порта: изменяйте mapping HOST:CONTAINER.
+### Проверка базы и инициализации
 
-### Проверка запуска
+```bash
+docker compose exec postgres pg_isready -U pulse -d pulse_crm
+docker compose exec postgres psql -U pulse -d pulse_crm -c '\dt'
+docker compose exec postgres psql -U pulse -d pulse_crm -c 'SELECT email FROM users;'
+docker compose exec postgres psql -U pulse -d pulse_crm -c 'SELECT COUNT(*) FROM user_organizations;'
+```
 
-Проверьте health endpoint и заголовки frontend:
+При чистом volume в `users` появится demo email, а в `user_organizations` — минимум две связи для seed-пользователя. Повторный `docker compose restart backend` не должен создавать дубликаты.
 
-    curl --fail http://localhost:8000/api/health
-    curl --fail --head http://localhost:3000
+### Smoke-проверка авторизации и связи
 
-Откройте UI и войдите демонстрационными данными из DEMO_EMAIL/DEMO_PASSWORD. После входа должны загрузиться данные дашборда. Это проверяет не только открытый порт, но и связку React → API → cookie-сессия.
+```bash
+curl --fail http://localhost:8000/api/health
+curl -i -c /tmp/pulse-cookies.txt \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"demo@pulse.crm","password":"demo123"}' \
+  http://localhost:8000/api/auth/login
+curl --fail -b /tmp/pulse-cookies.txt http://localhost:8000/api/auth/me
+curl --fail -b /tmp/pulse-cookies.txt http://localhost:8000/api/dashboard
+curl -b /tmp/pulse-cookies.txt -X POST http://localhost:8000/api/auth/logout
+```
 
-### Управление Compose
+Ответ `auth/me` должен содержать `user.organizations` с двумя организациями. Если поменяли `DEMO_EMAIL` или `DEMO_PASSWORD` после создания volume, seed уже существующей записи не переписывает её: измените запись штатной миграцией/админским инструментом либо удалите volume в локальной среде.
 
-    docker compose logs -f                  # объединённые логи
-    docker compose logs -f backend          # только API
-    docker compose exec backend sh          # shell в контейнере (если образ содержит sh)
-    docker compose restart frontend
-    docker compose down                     # остановить и удалить контейнеры
-    docker compose down -v                  # также удалить volumes; осторожно
-    docker compose build --no-cache         # полная пересборка после смены base image
+## 6. Схема, init и миграции
 
-Не используйте --no-cache как универсальное исправление: сначала проверьте логи и изменившиеся зависимости.
+Текущий onboarding использует SQLAlchemy `create_all` при старте backend:
 
-## 5. Локальная разработка без Docker
+1. backend ждёт доступное соединение по `DATABASE_URL`;
+2. создаёт `users`, `organizations`, `user_organizations` и `auth_sessions`, если их ещё нет;
+3. добавляет demo-пользователя, две организации и обе membership-связи, если они отсутствуют;
+4. начинает принимать HTTP-запросы.
+
+Это автоматическая инициализация для development/demo. В репозитории пока нет версии миграций. Перед изменением схемы в production добавьте Alembic или другой миграционный инструмент, создавайте миграции в CI и применяйте их отдельным шагом до запуска новой версии backend. Не удаляйте volume как способ обновления production-схемы.
+
+Чтобы открыть SQL shell:
+
+```bash
+docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
+
+Если переменные не экспортированы в shell, используйте значения из `.env` (по умолчанию `pulse` и `pulse_crm`) или передайте их явно.
+
+## 7. Локальная разработка без Docker
+
+### Поднять только PostgreSQL
+
+Оставьте PostgreSQL в Compose, а frontend/backend запускайте локально:
+
+```bash
+docker compose up -d postgres
+```
+
+Для локального процесса hostname должен быть `localhost`, а не `postgres`:
+
+```bash
+export DATABASE_URL='postgresql+psycopg://pulse:pulse_dev_password@localhost:5432/pulse_crm'
+export DEMO_EMAIL='demo@pulse.crm'
+export DEMO_PASSWORD='demo123'
+export FRONTEND_ORIGINS='http://localhost:5173'
+```
 
 ### Backend
 
-    cd backend
-    python -m venv .venv
-    source .venv/bin/activate               # Windows PowerShell: .venv\Scripts\Activate.ps1
-    python -m pip install --upgrade pip
-    python -m pip install -r requirements.txt
-    cp .env.example .env                    # если ещё не создан
-    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate               # Windows PowerShell: .venv\\Scripts\\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-Backend будет доступен на http://localhost:8000. В отдельном терминале можно открыть автоматически генерируемую документацию FastAPI: http://localhost:8000/docs.
+API будет доступен на <http://localhost:8000>, документация FastAPI — на <http://localhost:8000/docs>.
 
 ### Frontend
 
-    cd frontend
-    npm install                             # при наличии package-lock.json: npm ci
-    cp .env.example .env                    # если ещё не создан
-    npm run dev
+В отдельном терминале:
 
-Vite поднимется на http://localhost:5173 и направит /api на http://localhost:8000. Для другого адреса API задайте VITE_API_URL до запуска Vite.
+```bash
+cd frontend
+npm ci
+cp .env.example .env                    # если файл ещё не создан
+npm run dev
+```
+
+Vite будет доступен на <http://localhost:5173>. Для такого запуска добавьте `http://localhost:5173` в `FRONTEND_ORIGINS`; `VITE_API_URL` оставьте `/api`, если используется прокси из `vite.config.js`, либо задайте `http://localhost:8000/api`.
 
 Полезные команды:
 
-    npm run lint
-    npm run build
-    npm run preview
+```bash
+npm run lint
+npm run build
+npm run preview
+```
 
-## 6. Проверки перед commit
+## 8. Проверки перед commit и в CI
 
-Выполните из корня проекта:
+Запускайте из корня:
 
-    docker compose config
-    docker compose build
-    docker compose up -d
-    curl --fail http://localhost:8000/api/health
-    curl --fail --head http://localhost:3000
-    docker compose down
+```bash
+docker compose config
+docker compose build
+docker compose up -d
+curl --fail http://localhost:8000/api/health
+curl --fail --head http://localhost:3000
+curl --fail http://localhost:8000/docs
+docker compose down
+```
 
-Затем запустите проверки исходников:
+Затем исходные проверки:
 
-    (cd frontend && npm run lint && npm run build)
-    (cd backend && python -m compileall app)
+```bash
+(cd frontend && npm ci && npm run lint && npm run build)
+(cd backend && python -m compileall app)
+```
 
-Если в проект добавятся автоматические тесты, запускайте их в тех же образах, что используются для CI. Health check не заменяет тесты бизнес-логики.
+Полезная интеграционная проверка должна включать login с cookie, `/api/auth/me` и проверку непустого `user.organizations`; один открытый порт не доказывает готовность базы и авторизации.
 
-## 7. CI и облачная среда
+В CI кэшируйте Docker layers, npm и pip, но не `.env` и credentials. Порядок шагов: `docker compose config` → `build` → `up -d` → health и smoke login → `down`.
 
-В CI сохраните кэш Docker layers, npm и pip, но не кэшируйте .env и credentials. Порядок шагов:
+## 9. Типовые проблемы
 
-1. docker compose config — проверить синтаксис и подстановку переменных;
-2. docker compose build — собрать оба образа;
-3. docker compose up -d — стартовать сервисы;
-4. выполнить /api/health и smoke login/dashboard;
-5. docker compose down — удалить процессы.
+**`postgres` не становится healthy.**
 
-В облачной среде рабочий каталог — checkout репозитория (обычно /workspace/simple). Переменные задавайте через настройки окружения, а не через коммит и не через чат. Если Docker daemon недоступен, установите его в образ среды или используйте предоставленный runner; не подменяйте проверку запуском только одного локального процесса.
+Посмотрите `docker compose logs postgres`. Проверьте, что `POSTGRES_DB`, `POSTGRES_USER` и `POSTGRES_PASSWORD` не пусты и порт 5432 не занят другим контейнером. На первом старте PostgreSQL может занять несколько секунд; backend должен дождаться health check.
 
-## 8. Типовые проблемы
+**Backend сообщает `connection refused` или `could not translate host name postgres`.**
 
-**docker: command not found или недоступен daemon**
+В Compose `DATABASE_URL` должен использовать hostname `postgres`; при локальном запуске процесса — `localhost`. Проверьте `docker compose exec backend env | grep '^DATABASE_URL='` (не публикуйте значение в общих логах) и `docker compose ps`.
 
-Установите Docker Desktop/Engine и включите daemon. В удалённой среде проверьте docker info; права пользователя и socket должны быть доступны текущему процессу.
+**`relation does not exist` или ошибка seed.**
 
-**Порт 5173 или 8000 занят**
+Сначала перезапустите backend после того, как `postgres` стал healthy: `docker compose restart backend`. Если схема повреждена в development, выполните `docker compose down -v` и повторите запуск. В production удаление volume запрещено: восстановите backup или примените миграцию.
 
-Найдите процесс (lsof -i :5173 / lsof -i :8000) и остановите только свой процесс либо измените host-side mapping в Compose. Внутренний порт контейнера менять не нужно.
+**Login возвращает 401.**
 
-**Frontend открывается, но запросы /api получают 404/502**
+Проверьте фактические `DEMO_EMAIL` и `DEMO_PASSWORD`. Seed не переписывает существующего пользователя при изменении `.env`; для локального чистого seed удалите volume или измените запись поддержанным инструментом.
 
-Проверьте docker compose logs backend, health endpoint и proxy-конфигурацию Vite/Nginx. Внутри Compose backend доступен по имени сервиса, например http://backend:8000, а из браузера — по опубликованному адресу или same-origin /api; имя backend браузеру недоступно.
+**`/api/auth/me` возвращает 401 после перезапуска.**
 
-**CORS или cookie не сохраняются**
+Проверьте, отправляется ли cookie (`credentials: include`) и не менялся ли `SESSION_COOKIE`. Сессии хранятся в PostgreSQL, поэтому они переживают перезапуск backend; удаление volume или истечение TTL удалит доступ.
 
-Добавьте точный origin frontend в FRONTEND_ORIGINS (схема, host и порт), не используйте завершающий slash без необходимости и убедитесь, что frontend отправляет credentials: 'include'. Для HTTPS production cookie и reverse proxy должны быть настроены согласованно.
+**Frontend получает CORS/502.**
 
-**Login возвращает 401**
+В `FRONTEND_ORIGINS` укажите точный origin с протоколом и портом, без wildcard вместе с credentials. Из браузера нельзя использовать `http://backend:8000`; используйте `VITE_API_URL=http://localhost:8000/api` или публичный URL gateway.
 
-Проверьте фактические DEMO_EMAIL и DEMO_PASSWORD в окружении backend. Значения в frontend не являются источником истины. Не печатайте пароль в логи.
+**Изменения кода не видны в контейнере.**
 
-**Изменения в коде не видны в контейнере**
+Пересоберите образ: `docker compose up --build -d`. Не используйте `--no-cache` без причины: сначала проверьте логи и изменившиеся зависимости.
 
-Для production-style образа пересоберите его: docker compose up --build. Для bind mount/dev-сценария проверьте, что изменённый файл входит в mount и процесс поддерживает reload.
+## 10. Остановка и очистка
 
-**Сессия пропала после перезапуска**
+```bash
+docker compose down
+```
 
-Текущая демонстрационная реализация хранит сессии в памяти. Это ожидаемо; постоянное хранилище будет частью следующего этапа.
+Команда сохраняет volume PostgreSQL. Для удаления только локальных данных проекта:
 
-## 9. Остановка и очистка
+```bash
+docker compose down -v
+```
 
-    docker compose down
-
-Для удаления локальных образов проекта используйте docker image ls и удаляйте только образы, принадлежащие этому checkout. Не запускайте глобальную очистку (docker system prune) на общей машине без проверки последствий.
+Не запускайте `docker system prune` на общей машине без проверки последствий.
